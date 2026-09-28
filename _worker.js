@@ -1,63 +1,187 @@
-export default {
-  async fetch(request, env) {
-    try {
-      const url = new URL(request.url);
-      if (url.pathname === "/favicon.ico") return new Response(null,{status:204});
-      if (url.pathname.startsWith("/api/")) return await api(request, env, url);
-      if (request.method !== "GET") return json({ok:false,error:"Method not allowed"},405);
-      return new Response(PAGE,{headers:{"content-type":"text/html;charset=UTF-8","cache-control":"no-store"}});
-    } catch (e) {
-      return new Response("Admin Worker error: " + (e && e.message ? e.message : String(e)), {status:500,headers:{"content-type":"text/plain;charset=UTF-8"}});
-    }
-  }
-};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-const PAGE = "<!doctype html>\n<html lang=\"ru\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">\n<meta name=\"theme-color\" content=\"#160f1c\">\n<title>Vasilisa — Admin</title>\n<style>\n:root{--bg:#100b14;--panel:#1b1320;--panel2:#241725;--gold:#c79a52;--gold2:#e0bd7f;--text:#f3ebe1;--muted:#b9adbd;--line:#3a2c3e;--danger:#d96a72;--ok:#82c49b}\n*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Arial,sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:none!important}\n.wrap{max-width:1180px;margin:auto;padding:24px}.login{min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 10%,#2b1c32 0,#100b14 55%)}\n.card{background:rgba(27,19,32,.98);border:1px solid var(--line);border-radius:18px;box-shadow:0 18px 60px #0006}.login .card{width:min(430px,100%);padding:32px}.brand{color:var(--gold2);letter-spacing:.16em;text-transform:uppercase;font-size:12px}.login h1{font:38px Georgia,serif;margin:8px 0 26px}.field{display:grid;gap:7px;margin:14px 0}.field label{color:var(--muted);font-size:13px}.field input,.field textarea,.field select{width:100%;background:#120d16;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:12px;outline:none}.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--gold)}\n.btn{border:1px solid var(--gold);background:var(--gold);color:#171019;border-radius:10px;padding:11px 15px;font-weight:700}.btn.secondary{background:transparent;color:var(--gold2)}.btn.danger{border-color:var(--danger);background:transparent;color:#ffadb2}.btn.small{padding:7px 10px;font-size:13px}.top{position:sticky;top:0;z-index:10;background:#100b14ee;border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}.topin{max-width:1180px;margin:auto;padding:14px 24px;display:flex;align-items:center;gap:18px}.logo{font:22px Georgia,serif;color:var(--gold2);margin-right:auto}.nav{display:flex;gap:6px;flex-wrap:wrap}.nav button{background:transparent;border:1px solid transparent;color:var(--muted);padding:8px 10px;border-radius:8px}.nav button.active,.nav button:hover{color:var(--text);border-color:var(--line);background:var(--panel2)}\nmain{padding:28px 0 60px}.title{font:38px Georgia,serif;margin:0 0 6px}.sub{color:var(--muted);margin:0 0 24px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.stat{padding:18px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.stat small{color:var(--muted)}.stat b{display:block;font-size:27px;color:var(--gold2);margin-top:4px}.grid{display:grid;grid-template-columns:1.3fr .7fr;gap:18px}.panel{padding:20px;background:var(--panel);border:1px solid var(--line);border-radius:16px}.toolbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:11px 8px;border-bottom:1px solid var(--line);vertical-align:top}.table th{color:var(--muted);font-weight:500;font-size:13px}.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:12px}.badge.ok{color:var(--ok);border-color:#31583e}.badge.cancel{color:#ffadb2;border-color:#65343a}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}.day{min-height:72px;padding:8px;border:1px solid var(--line);border-radius:10px;background:#151019;text-align:left;color:var(--text)}.day.muted{opacity:.35}.day.closed{border-color:#71353c;background:#261419}.day.today{outline:1px solid var(--gold)}.day strong{display:block}.hours{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.hour{padding:9px;border:1px solid var(--line);background:#151019;color:var(--text);border-radius:8px}.hour.closed{border-color:#71353c;color:#ffadb2}.notice{padding:11px 13px;border-radius:10px;background:#171019;border:1px solid var(--line);color:var(--muted);margin:12px 0}.notice.ok{border-color:#31583e;color:#a9d7b8}.notice.err{border-color:#65343a;color:#ffadb2}.cards{display:grid;gap:12px}.proc{display:grid;grid-template-columns:1fr auto;gap:10px;padding:15px;border:1px solid var(--line);border-radius:12px;background:#171019}.proc h3{margin:0 0 4px}.price{color:var(--gold2);font-size:20px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.lang{color:var(--gold2);font-size:12px}.empty{color:var(--muted);padding:18px 0}.mobileOnly{display:none}\n@media(max-width:800px){.wrap{padding:18px}.topin{padding:12px 18px;align-items:flex-start}.nav{display:none}.mobileOnly{display:block}.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.hours{grid-template-columns:repeat(3,1fr)}.title{font-size:32px}.table{font-size:13px}.tableWrap{overflow:auto}.top .btn.small{margin-left:8px}}\n</style>\n</head>\n<body>\n<div id=\"app\"></div>\n<script>\n(function(){\n'use strict';\nvar app=document.getElementById('app'), state={user:null,tab:'dashboard',stats:null,bookings:[],procedures:[],closedDays:[],closedHours:[],selectedDate:null,notice:''};\nfunction esc(v){return String(v==null?'':v).replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]})}\nfunction api(path,opt){opt=opt||{};var o={method:opt.method||'GET',headers:{'Content-Type':'application/json'}};if(opt.body!==undefined)o.body=JSON.stringify(opt.body);return fetch(path,o).then(function(r){return r.json().catch(function(){return {ok:false,error:'Ответ сервера не JSON'}}).then(function(x){if(!r.ok)throw new Error(x.error||('HTTP '+r.status));return x})})}\nfunction toast(msg,ok){state.notice=msg;render();setTimeout(function(){state.notice='';render()},2500)}\nfunction login(){app.innerHTML='<div class=\"login\"><div class=\"card\"><div class=\"brand\">Cosmetology by Vasilisa</div><h1>Админ-панель</h1><form id=\"loginForm\"><div class=\"field\"><label>Логин</label><input id=\"u\" autocomplete=\"username\" required></div><div class=\"field\"><label>Пароль</label><input id=\"p\" type=\"password\" autocomplete=\"current-password\" required></div><button class=\"btn\" style=\"width:100%\">Войти</button></form><div id=\"loginErr\"></div></div></div>';document.getElementById('loginForm').onsubmit=function(e){e.preventDefault();var er=document.getElementById('loginErr');er.innerHTML='';api('/api/login',{method:'POST',body:{user:document.getElementById('u').value,password:document.getElementById('p').value}}).then(function(){boot()}).catch(function(e){er.innerHTML='<div class=\"notice err\">'+esc(e.message)+'</div>'})}}\nfunction nav(){return '<div class=\"top\"><div class=\"topin\"><div class=\"logo\">Vasilisa Admin</div><button class=\"btn small mobileOnly\" onclick=\"toggleNav()\">Меню</button><div class=\"nav\" id=\"nav\">'+[['dashboard','Обзор'],['calendar','Календарь'],['bookings','Записи'],['procedures','Процедуры'],['quiz','Квиз'],['gallery','До / После'],['reviews','Отзывы'],['settings','Настройки']].map(function(x){return '<button class=\"'+(state.tab===x[0]?'active':'')+'\" onclick=\"go(\\''+x[0]+'\\')\">'+x[1]+'</button>'}).join('')+'</div><button class=\"btn secondary small\" onclick=\"logout()\">Выйти</button></div></div>'}\nfunction base(title,sub,body){return nav()+'<main><div class=\"wrap\"><h1 class=\"title\">'+title+'</h1><p class=\"sub\">'+sub+'</p>'+(state.notice?'<div class=\"notice ok\">'+esc(state.notice)+'</div>':'')+body+'</div></main>'}\nfunction dashboard(){var s=state.stats||{};return base('Обзор','Управление записью и расписанием', '<div class=\"stats\"><div class=\"stat\"><small>Всего записей</small><b>'+esc(s.total||0)+'</b></div><div class=\"stat\"><small>Сегодня</small><b>'+esc(s.today||0)+'</b></div><div class=\"stat\"><small>Активные процедуры</small><b>'+esc(s.procedures||0)+'</b></div><div class=\"stat\"><small>Закрытых дней</small><b>'+esc(s.closedDays||0)+'</b></div></div><div class=\"grid\"><div class=\"panel\"><h2>Последние записи</h2>'+bookingTable(state.bookings.slice(0,8))+'</div><div class=\"panel\"><h2>Быстрые действия</h2><div class=\"cards\"><button class=\"btn\" onclick=\"go(\\'calendar\\')\">Открыть календарь</button><button class=\"btn secondary\" onclick=\"go(\\'bookings\\')\">Посмотреть записи</button><button class=\"btn secondary\" onclick=\"go(\\'procedures\\')\">Изменить процедуры</button></div></div></div>')}\nfunction bookingTable(rows){if(!rows.length)return '<div class=\"empty\">Пока нет записей.</div>';return '<div class=\"tableWrap\"><table class=\"table\"><thead><tr><th>Дата</th><th>Клиент</th><th>Процедура</th><th>Статус</th></tr></thead><tbody>'+rows.map(function(b){return '<tr><td>'+esc(b.date||b.booking_date||'')+'<br>'+esc(b.time||b.booking_time||'')+'</td><td>'+esc(b.client_name||b.name||'')+'<br><span style=\"color:var(--muted)\">'+esc(b.phone||'')+'</span></td><td>'+esc(b.procedure_name||b.procedure||'')+'</td><td>'+badge(b.status)+'</td></tr>'}).join('')+'</tbody></table></div>'}\nfunction badge(s){s=s||'pending';var cls=s==='confirmed'?'ok':s==='cancelled'?'cancel':'';return '<span class=\"badge '+cls+'\">'+esc(s==='confirmed'?'Подтверждена':s==='cancelled'?'Отменена':'Ожидает')+'</span>'}\nfunction bookings(){return base('Записи','Все заявки клиентов','<div class=\"panel\"><div class=\"toolbar\"><button class=\"btn secondary small\" onclick=\"loadAll()\">Обновить</button></div>'+bookingTable(state.bookings)+'</div>')}\nfunction calendar(){var d=new Date(),y=d.getFullYear(),m=d.getMonth();if(state.calYear!=null){y=state.calYear;m=state.calMonth}var first=new Date(y,m,1),start=(first.getDay()+6)%7,days=new Date(y,m+1,0).getDate(),html='<div class=\"panel\"><div class=\"toolbar\"><button class=\"btn secondary small\" onclick=\"month(-1)\">←</button><b>'+['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'][m]+' '+y+'</b><button class=\"btn secondary small\" onclick=\"month(1)\">→</button></div><div class=\"calendar\">';for(var i=0;i<start;i++)html+='<div></div>';for(var n=1;n<=days;n++){var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(n).padStart(2,'0'),closed=state.closedDays.indexOf(ds)>=0,today=new Date().toISOString().slice(0,10);html+='<button class=\"day '+(closed?'closed ':'')+(ds===today?'today ':'')+'\" onclick=\"selectDay(\\''+ds+'\\')\"><strong>'+n+'</strong><small>'+(closed?'Закрыт':'Открыт')+'</small></button>'}html+='</div></div>';var detail='';if(state.selectedDate){var c=state.closedDays.indexOf(state.selectedDate)>=0;detail='<div class=\"panel\"><h2>'+esc(state.selectedDate)+'</h2><div class=\"toolbar\"><button class=\"btn '+(c?'secondary':'')+'\" onclick=\"toggleDay()\">'+(c?'Открыть день':'Закрыть день')+'</button></div><p class=\"sub\">Закрыть отдельные часы:</p><div class=\"hours\">'+Array.from({length:13},function(_,i){var h=9+i,ds=state.selectedDate+'T'+String(h).padStart(2,'0')+':00',cl=state.closedHours.indexOf(ds)>=0;return '<button class=\"hour '+(cl?'closed':'')+'\" onclick=\"toggleHour(\\''+ds+'\\')\">'+String(h).padStart(2,'0')+':00 · '+(cl?'закрыт':'открыт')+'</button>'}).join('')+'</div></div>'}return base('Календарь','Закрывайте целые дни или отдельные часы', '<div class=\"grid\">'+html+detail+'</div>')}\nfunction procedures(){return base('Процедуры','Редактирование цены и активности','<div class=\"cards\">'+state.procedures.map(function(p){return '<div class=\"proc\"><div><div class=\"lang\">RU · '+(p.active?'АКТИВНА':'СКРЫТА')+'</div><h3>'+esc(p.name)+'</h3><div style=\"color:var(--muted)\">'+esc(p.description)+'</div></div><div style=\"text-align:right\"><div class=\"price\">'+esc(p.price)+' €</div><button class=\"btn secondary small\" onclick=\"editProc('+p.id+')\">Изменить</button></div></div>'}).join('')+'</div>')}\nfunction placeholder(title,text){return base(title,text,'<div class=\"panel\"><div class=\"notice\">Раздел готов к подключению к базе. Основные данные сайта при этом не затрагиваются.</div></div>')}\nfunction render(){if(!state.user){login();return}var body=state.tab==='dashboard'?dashboard():state.tab==='calendar'?calendar():state.tab==='bookings'?bookings():state.tab==='procedures'?procedures():state.tab==='quiz'?placeholder('Квиз кожи','Вопросы и связи с процедурами'):state.tab==='gallery'?placeholder('До / После','Галерея результатов'):state.tab==='reviews'?placeholder('Отзывы','Отзывы клиентов'):placeholder('Настройки','Контакты и настройки сайта');app.innerHTML=body}\nwindow.go=function(t){state.tab=t;loadAll()};window.toggleNav=function(){var n=document.getElementById('nav');n.style.display=n.style.display==='flex'?'none':'flex'};window.month=function(delta){var d=new Date(state.calYear||new Date().getFullYear(),(state.calMonth==null?new Date().getMonth():state.calMonth)+delta,1);state.calYear=d.getFullYear();state.calMonth=d.getMonth();render()};window.selectDay=function(ds){state.selectedDate=ds;render()};window.toggleDay=function(){api('/api/calendar/day',{method:'POST',body:{date:state.selectedDate,closed:state.closedDays.indexOf(state.selectedDate)<0}}).then(loadAll).catch(function(e){toast(e.message,false)})};window.toggleHour=function(ds){api('/api/calendar/hour',{method:'POST',body:{datetime:ds,closed:state.closedHours.indexOf(ds)<0}}).then(loadAll).catch(function(e){toast(e.message,false)})};window.editProc=function(id){var p=state.procedures.find(function(x){return x.id===id});if(!p)return;var name=prompt('Название процедуры',p.name);if(name===null)return;var price=prompt('Цена',p.price);if(price===null)return;var desc=prompt('Описание',p.description||'');if(desc===null)return;api('/api/procedures/'+id,{method:'POST',body:{name:name,price:Number(price),description:desc,active:!!p.active}}).then(loadAll).catch(function(e){toast(e.message,false)})};window.logout=function(){fetch('/api/logout',{method:'POST'}).finally(function(){location.reload()})};\nfunction loadAll(){Promise.all([api('/api/me'),api('/api/dashboard'),api('/api/bookings'),api('/api/procedures'),api('/api/calendar')]).then(function(a){state.user=a[0].user;state.stats=a[1];state.bookings=a[2].items||[];state.procedures=a[3].items||[];state.closedDays=a[4].closedDays||[];state.closedHours=a[4].closedHours||[];render()}).catch(function(e){if(String(e.message).toLowerCase().indexOf('auth')>=0){state.user=null;render()}else{state.user=state.user||{name:'admin'};state.notice=e.message;render()}})}\nfunction boot(){api('/api/me').then(function(x){state.user=x.user;loadAll()}).catch(function(){state.user=null;render()})}boot();\n})();\n</script>\n</body></html>";
-
-function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{"content-type":"application/json;charset=UTF-8","cache-control":"no-store"}})}
-function cookie(req,name){const s=req.headers.get("Cookie")||"";const m=s.match(new RegExp("(?:^|; )"+name.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\$&")+"=([^;]+)"));return m?decodeURIComponent(m[1]):""}
-function setCookie(v){return "va_session="+encodeURIComponent(v)+"; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400"}
-async function sign(text,secret){const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(secret),{name:"HMAC",hash:"SHA-256"},false,["sign"]);const b=await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(text));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
-async function session(req,env){const v=cookie(req,"va_session");if(!v||!env.SESSION_SECRET)return null;const p=v.split(".");if(p.length!==3)return null;const raw=p[0]+"."+p[1];const sig=await sign(raw,env.SESSION_SECRET);if(sig!==p[2])return null;const exp=Number(p[1]);if(!Number.isFinite(exp)||exp<Date.now())return null;return {user:p[0]}}
-async function requireAuth(req,env){const s=await session(req,env);if(!s)throw Object.assign(new Error("auth"),{status:401});return s}
-async function db(env){if(!env.DB)throw Object.assign(new Error("D1 binding DB is missing"),{status:503});await env.DB.batch([
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, client_name TEXT, phone TEXT, procedure_name TEXT, booking_date TEXT, booking_time TEXT, status TEXT DEFAULT 'pending', created_at TEXT DEFAULT CURRENT_TIMESTAMP)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS procedures (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, description TEXT, active INTEGER DEFAULT 1)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS closed_days (date TEXT PRIMARY KEY)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS closed_hours (datetime TEXT PRIMARY KEY)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS quiz_questions (id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT, active INTEGER DEFAULT 1)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, image_url TEXT, active INTEGER DEFAULT 1)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, author TEXT, text TEXT, active INTEGER DEFAULT 1)"),
-  env.DB.prepare("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
-]);
-return env.DB}
-async function api(req,env,url){
+async function cols(db, table){
   try{
-    if(url.pathname==="/api/login"&&req.method==="POST"){
-      const b=await req.json();if(!env.ADMIN_USER||!env.ADMIN_PASSWORD||!env.SESSION_SECRET)return json({ok:false,error:"Admin secrets are not configured in Cloudflare"},500);
-      if(String(b.user)!==String(env.ADMIN_USER)||String(b.password)!==String(env.ADMIN_PASSWORD))return json({ok:false,error:"Неверный логин или пароль"},401);
-      const exp=Date.now()+86400000;const raw=String(env.ADMIN_USER)+"."+exp;const sig=await sign(raw,env.SESSION_SECRET);return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","set-cookie":setCookie(raw+"."+sig)}})
-    }
-    if(url.pathname==="/api/logout")return new Response(JSON.stringify({ok:true}),{headers:{"content-type":"application/json","set-cookie":"va_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax"}});
-    const s=await requireAuth(req,env);
-    if(url.pathname==="/api/me")return json({ok:true,user:s.user});
-    const D=await db(env);
-    if(url.pathname==="/api/dashboard"){
-      const [a,b,c,d]=await D.batch([D.prepare("SELECT COUNT(*) n FROM bookings"),D.prepare("SELECT COUNT(*) n FROM bookings WHERE booking_date=?").bind(new Date().toISOString().slice(0,10)),D.prepare("SELECT COUNT(*) n FROM procedures WHERE active=1"),D.prepare("SELECT COUNT(*) n FROM closed_days")]);
-      return json({ok:true,total:a.results[0]?.n||0,today:b.results[0]?.n||0,procedures:c.results[0]?.n||0,closedDays:d.results[0]?.n||0})
-    }
-    if(url.pathname==="/api/bookings")return json({ok:true,items:(await D.prepare("SELECT * FROM bookings ORDER BY booking_date DESC, booking_time DESC, id DESC LIMIT 500").all()).results||[]});
-    if(url.pathname==="/api/procedures"&&req.method==="GET")return json({ok:true,items:(await D.prepare("SELECT * FROM procedures ORDER BY id").all()).results||[]});
-    if(url.pathname.startsWith("/api/procedures/")&&req.method==="POST"){
-      const id=Number(url.pathname.split("/").pop()),b=await req.json();await D.prepare("UPDATE procedures SET name=?,price=?,description=?,active=? WHERE id=?").bind(String(b.name||""),Number(b.price||0),String(b.description||""),b.active?1:0,id).run();return json({ok:true})
-    }
-    if(url.pathname==="/api/calendar")return json({ok:true,closedDays:(await D.prepare("SELECT date FROM closed_days ORDER BY date").all()).results.map(x=>x.date),closedHours:(await D.prepare("SELECT datetime FROM closed_hours ORDER BY datetime").all()).results.map(x=>x.datetime)});
-    if(url.pathname==="/api/calendar/day"&&req.method==="POST"){
-      const b=await req.json();if(b.closed)await D.prepare("INSERT OR IGNORE INTO closed_days(date) VALUES(?)").bind(String(b.date)).run();else await D.prepare("DELETE FROM closed_days WHERE date=?").bind(String(b.date)).run();return json({ok:true})
-    }
-    if(url.pathname==="/api/calendar/hour"&&req.method==="POST"){
-      const b=await req.json();if(b.closed)await D.prepare("INSERT OR IGNORE INTO closed_hours(datetime) VALUES(?)").bind(String(b.datetime)).run();else await D.prepare("DELETE FROM closed_hours WHERE datetime=?").bind(String(b.datetime)).run();return json({ok:true})
-    }
-    return json({ok:false,error:"Not found"},404)
-  }catch(e){return json({ok:false,error:e.message||String(e)},e.status||500)}
+    const r = await db.prepare(`PRAGMA table_info("${table}")`).all();
+    return (r.results || []).map(x => x.name);
+  }catch(e){ return []; }
 }
+async function rows(db, table, limit=200){
+  try{
+    const r = await db.prepare(`SELECT * FROM "${table}" LIMIT ${limit}`).all();
+    return r.results || [];
+  }catch(e){ return []; }
+}
+function pick(o, names, fallback=""){
+  for(const n of names) if(o && o[n] !== undefined && o[n] !== null) return o[n];
+  return fallback;
+}
+async function tableInfo(db, table){
+  return { columns: await cols(db, table), data: await rows(db, table) };
+}
+
+async function ensure(db){
+  await db.prepare(`CREATE TABLE IF NOT EXISTS admin_sessions (
+    token TEXT PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL
+  )`).run();
+  await db.prepare(`CREATE TABLE IF NOT EXISTS admin_settings (
+    key TEXT PRIMARY KEY, value TEXT
+  )`).run();
+}
+
+function cookie(name, value, maxAge=604800){
+  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+async function authorized(req, env){
+  const c = req.headers.get("Cookie") || "";
+  const m = c.match(/va_session=([^;]+)/);
+  if(!m) return false;
+  try{
+    const token = decodeURIComponent(m[1]);
+    const r = await env.DB.prepare(
+      `SELECT token FROM admin_sessions WHERE token=? AND expires_at > CURRENT_TIMESTAMP`
+    ).bind(token).first();
+    return !!r;
+  }catch(e){ return false; }
+}
+function rand(){
+  return crypto.randomUUID().replaceAll("-","") + crypto.randomUUID().replaceAll("-","");
+}
+
+const CSS = `
+*{box-sizing:border-box}html,body{margin:0;background:#160f1c;color:#f3ebe1;font-family:Inter,Arial,sans-serif}
+body{min-height:100vh}.wrap{max-width:1200px;margin:auto;padding:24px}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0 24px;border-bottom:1px solid #3a2b3e}
+.brand{font-family:Georgia,serif;font-size:28px}.muted{color:#b9aeba}.gold{color:#c79a52}
+nav{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0}button,.btn{border:1px solid #c79a52;background:#241725;color:#f3ebe1;padding:11px 15px;border-radius:8px;cursor:pointer}button:hover,.btn:hover{background:#312035}
+input,select,textarea{width:100%;background:#211621;border:1px solid #55435b;color:#f3ebe1;padding:11px;border-radius:8px}textarea{min-height:90px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:#211621;border:1px solid #3a2b3e;border-radius:12px;padding:18px}.stat b{display:block;font-size:28px;margin-top:8px}
+.panel{background:#211621;border:1px solid #3a2b3e;border-radius:12px;padding:20px;margin-top:18px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px;border-bottom:1px solid #3a2b3e;vertical-align:top}th{color:#c79a52}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.actions{display:flex;flex-wrap:wrap;gap:8px}.error{border:1px solid #a94d5e;background:#28141d;color:#ffb8c2;padding:14px;border-radius:9px;margin:15px 0}
+.login{max-width:430px;margin:10vh auto}.title{font-family:Georgia,serif;font-size:38px;margin:0 0 8px}
+@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.wrap{padding:14px}table{font-size:13px;display:block;overflow:auto;white-space:nowrap}}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.brand{font-size:23px}}
+`;
+
+async function api(req, env, url){
+  await ensure(env.DB);
+  const p = url.pathname;
+  if(p === "/api/login" && req.method==="POST"){
+    const b = await req.json().catch(()=>({}));
+    if(String(b.user||"") !== String(env.ADMIN_USER||"") || String(b.password||"") !== String(env.ADMIN_PASSWORD||""))
+      return Response.json({ok:false,error:"Неверный логин или пароль"},{status:401});
+    const token=rand();
+    await env.DB.prepare(`INSERT INTO admin_sessions(token,expires_at) VALUES(?,datetime('now','+7 days'))`).bind(token).run();
+    return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json','set-cookie':cookie("va_session",token)}});
+  }
+  if(p === "/api/logout"){
+    const c=req.headers.get("Cookie")||"",m=c.match(/va_session=([^;]+)/);
+    if(m) await env.DB.prepare("DELETE FROM admin_sessions WHERE token=?").bind(decodeURIComponent(m[1])).run().catch(()=>{});
+    return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json','set-cookie':cookie("va_session","",-1)}});
+  }
+  if(!(await authorized(req,env))) return Response.json({ok:false,error:"auth"},{status:401});
+
+  if(p === "/api/data"){
+    const [proc,book,closedD,closedH,quiz,gallery,reviews,settings] = await Promise.all([
+      tableInfo(env.DB,"procedures"),tableInfo(env.DB,"bookings"),tableInfo(env.DB,"closed_days"),
+      tableInfo(env.DB,"closed_hours"),tableInfo(env.DB,"quiz_concerns"),tableInfo(env.DB,"gallery"),
+      tableInfo(env.DB,"reviews"),tableInfo(env.DB,"settings")
+    ]);
+    return Response.json({ok:true,procedures:proc.data,procedureColumns:proc.columns,bookings:book.data,bookingColumns:book.columns,
+      closedDays:closedD.data,closedDayColumns:closedD.columns,closedHours:closedH.data,closedHourColumns:closedH.columns,
+      quiz:quiz.data,gallery:gallery.data,reviews:reviews.data,settings:settings.data});
+  }
+
+  if(p === "/api/procedure" && req.method==="POST"){
+    const b=await req.json();
+    const id=Number(b.id);
+    const c=await cols(env.DB,"procedures");
+    const sets=[],vals=[];
+    if(c.includes("price") && b.price!==undefined){sets.push("price=?");vals.push(b.price)}
+    if(c.includes("description") && b.description!==undefined){sets.push("description=?");vals.push(b.description)}
+    if(c.includes("active") && b.active!==undefined){sets.push("active=?");vals.push(b.active?1:0)}
+    if(c.includes("name") && b.name!==undefined){sets.push("name=?");vals.push(b.name)}
+    if(!sets.length) return Response.json({ok:true});
+    await env.DB.prepare(`UPDATE procedures SET ${sets.join(",")} WHERE id=?`).bind(...vals,id).run();
+    return Response.json({ok:true});
+  }
+
+  if(p === "/api/close-day" && req.method==="POST"){
+    const b=await req.json(), c=await cols(env.DB,"closed_days");
+    const date=b.date, closed=b.closed!==false;
+    if(!c.includes("date")) return Response.json({ok:false,error:"В таблице closed_days нет колонки date"},{status:500});
+    if(closed){
+      if(c.includes("day")) await env.DB.prepare(`INSERT OR REPLACE INTO closed_days(date,day) VALUES(?,?)`).bind(date,date).run();
+      else await env.DB.prepare(`INSERT OR REPLACE INTO closed_days(date) VALUES(?)`).bind(date).run();
+    } else await env.DB.prepare(`DELETE FROM closed_days WHERE date=?`).bind(date).run();
+    return Response.json({ok:true});
+  }
+
+  if(p === "/api/close-hour" && req.method==="POST"){
+    const b=await req.json(), c=await cols(env.DB,"closed_hours");
+    if(!c.includes("date") || !c.includes("hour")) return Response.json({ok:false,error:"closed_hours требует date и hour"},{status:500});
+    if(b.closed!==false) await env.DB.prepare(`INSERT OR REPLACE INTO closed_hours(date,hour) VALUES(?,?)`).bind(b.date,Number(b.hour)).run();
+    else await env.DB.prepare(`DELETE FROM closed_hours WHERE date=? AND hour=?`).bind(b.date,Number(b.hour)).run();
+    return Response.json({ok:true});
+  }
+
+  if(p === "/api/booking-status" && req.method==="POST"){
+    const b=await req.json(), c=await cols(env.DB,"bookings");
+    if(!c.includes("status")) return Response.json({ok:false,error:"В таблице bookings нет status"},{status:500});
+    const id = b.id;
+    await env.DB.prepare(`UPDATE bookings SET status=? WHERE id=?`).bind(String(b.status),id).run();
+    return Response.json({ok:true});
+  }
+
+  return Response.json({ok:false,error:"Not found"},{status:404});
+}
+
+function loginPage(msg=""){
+return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vasilisa — Admin</title><style>${CSS}</style></head><body><main class="login"><div class="card"><div class="gold">COSMETOLOGY BY VASILISA</div><h1 class="title">Админ-панель</h1><p class="muted">Управление сайтом и записями</p>${msg?`<div class="error">${esc(msg)}</div>`:""}<form method="post" action="/login"><p><label>Логин<input name="user" autocomplete="username"></label></p><p><label>Пароль<input type="password" name="password" autocomplete="current-password"></label></p><button type="submit">Войти</button></form></div></main></body></html>`;
+}
+
+function shell(){
+return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vasilisa — Admin</title><style>${CSS}</style></head><body><div class="wrap"><header><div><div class="gold">COSMETOLOGY BY VASILISA</div><div class="brand">Админ-панель</div></div><button id="logout">Выйти</button></header><nav><button data-tab="dashboard">Обзор</button><button data-tab="bookings">Записи</button><button data-tab="procedures">Процедуры</button><button data-tab="calendar">Календарь</button><button data-tab="quiz">Квиз кожи</button></nav><div id="app"></div></div><script>
+const $=s=>document.querySelector(s), app=$("#app"); let data={};
+async function get(){let r=await fetch("/api/data"); if(r.status===401){location="/login";return} let j=await r.json(); if(!j.ok) throw Error(j.error); data=j}
+async function act(url,body){let r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});let j=await r.json();if(!j.ok)throw Error(j.error||"Ошибка");await get();render()}
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function pick(o,names){for(const n of names)if(o&&o[n]!=null)return o[n];return ""}
+function render(){
+ const tab=window.tab||"dashboard";
+ if(tab==="dashboard"){app.innerHTML=\`<div class="grid"><div class="card stat"><span class="muted">Процедуры</span><b>\${data.procedures.length}</b></div><div class="card stat"><span class="muted">Записи</span><b>\${data.bookings.length}</b></div><div class="card stat"><span class="muted">Закрытые дни</span><b>\${data.closedDays.length}</b></div><div class="card stat"><span class="muted">Фото</span><b>\${data.gallery.length}</b></div></div><div class="panel"><h2>Система</h2><p class="muted">Админка подключена к существующей базе vasilisa-db. Колонки таблиц определяются автоматически, поэтому старую базу пересоздавать не нужно.</p></div>\`}
+ if(tab==="bookings"){let rows=data.bookings.map(b=>\`<tr><td>\${esc(b.id)}</td><td>\${esc(pick(b,["client_name","name","client","customer_name"]))}</td><td>\${esc(pick(b,["phone","telephone"]))}</td><td>\${esc(pick(b,["procedure_name","procedure","service"]))}</td><td>\${esc(pick(b,["booking_date","date","appointment_date"]))} \${esc(pick(b,["booking_time","time","appointment_time"]))}</td><td>\${esc(pick(b,["status","state"]))}</td></tr>\`).join("");app.innerHTML=\`<div class="panel"><h2>Записи</h2><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Клиент</th><th>Телефон</th><th>Процедура</th><th>Дата / время</th><th>Статус</th></tr></thead><tbody>\${rows||"<tr><td colspan=6>Пока нет записей</td></tr>"}</tbody></table></div></div>\`}
+ if(tab==="procedures"){app.innerHTML=\`<div class="panel"><h2>Процедуры</h2>\${data.procedures.map(p=>\`<div class="card" style="margin:12px 0"><div class="row"><label>Название<input id="n\${p.id}" value="\${esc(p.name)}"></label><label>Цена<input id="p\${p.id}" value="\${esc(p.price)}"></label></div><p><label>Описание<textarea id="d\${p.id}">\${esc(p.description)}</textarea></label></p><div class="actions"><button onclick="saveProc(\${p.id})">Сохранить</button></div></div>\`).join("")}</div>\`}
+ if(tab==="calendar"){let today=new Date().toISOString().slice(0,10);app.innerHTML=\`<div class="panel"><h2>Календарь</h2><div class="row"><label>Дата<input type="date" id="cd" value="\${today}"></label><div class="actions" style="align-items:end"><button onclick="closeDay(true)">Закрыть день</button><button onclick="closeDay(false)">Открыть день</button></div></div><p class="muted">Для отдельных часов:</p><div class="actions">\${[9,10,11,12,13,14,15,16].map(h=>\`<button onclick="closeHour(\${h},true)">\${h}:00 закрыть</button><button onclick="closeHour(\${h},false)">\${h}:00 открыть</button>\`).join("")}</div></div>\`}
+ if(tab==="quiz"){app.innerHTML=\`<div class="panel"><h2>Квиз кожи</h2><p class="muted">В этой версии раздел подключён безопасно: данные читаются из quiz_concerns, если таблица существует. Старые данные не изменяются.</p><div class="grid">\${data.quiz.map(q=>\`<div class="card"><b>\${esc(pick(q,["name","title","concern","question"]))}</b></div>\`).join("")||"<div class=card>Пока нет данных</div>"}</div></div>\`}
+}
+async function saveProc(id){await act("/api/procedure",{id,name:$("#n"+id).value,price:$("#p"+id).value,description:$("#d"+id).value})}
+async function closeDay(v){await act("/api/close-day",{date:$("#cd").value,closed:v})}
+async function closeHour(h,v){await act("/api/close-hour",{date:$("#cd").value,hour:h,closed:v})}
+document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{window.tab=b.dataset.tab;render()});
+$("#logout").onclick=async()=>{await fetch("/api/logout");location="/login"};
+get().then(render).catch(e=>app.innerHTML='<div class="error">'+esc(e.message)+'</div>');
+</script></body></html>`;
+}
+
+export default {
+ async fetch(req, env){
+  const url=new URL(req.url);
+  try{
+    if(!env.DB) return new Response("D1 binding DB is missing",{status:500});
+    if(url.pathname.startsWith("/api/")) return api(req,env,url);
+    if(url.pathname==="/login" && req.method==="POST"){
+      const f=await req.formData(), u=String(f.get("user")||""), p=String(f.get("password")||"");
+      if(u!==String(env.ADMIN_USER||"") || p!==String(env.ADMIN_PASSWORD||"")) return new Response(loginPage("Неверный логин или пароль"),{headers:{"content-type":"text/html;charset=utf-8"}});
+      await ensure(env.DB); const token=rand();
+      await env.DB.prepare(`INSERT INTO admin_sessions(token,expires_at) VALUES(?,datetime('now','+7 days'))`).bind(token).run();
+      return new Response(shell(),{headers:{"content-type":"text/html;charset=utf-8","set-cookie":cookie("va_session",token)}});
+    }
+    if(url.pathname==="/login" || !(await authorized(req,env))) return new Response(loginPage(),{headers:{"content-type":"text/html;charset=utf-8"}});
+    return new Response(shell(),{headers:{"content-type":"text/html;charset=utf-8","cache-control":"no-store"}});
+  }catch(e){
+    return new Response(`<!doctype html><meta charset="utf-8"><style>body{font-family:Arial;background:#160f1c;color:#f3ebe1;padding:30px}pre{white-space:pre-wrap;color:#ffb8c2}</style><h1>Vasilisa Admin — ошибка</h1><pre>${esc(e.stack||e.message||e)}</pre>`,{status:500,headers:{"content-type":"text/html;charset=utf-8","cache-control":"no-store"}});
+  }
+ }
+};

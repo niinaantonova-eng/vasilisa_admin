@@ -1,11 +1,9 @@
-# Vasilisa Admin — clean Worker
-
-This is a standalone Cloudflare Worker-style admin panel. It does not use `env.ASSETS`, React, npm, or a build step.
-
-Required Cloudflare bindings/secrets:
+# Vasilisa Admin — D1 compatible
+Upload `_worker.js` as the only runtime file in the Cloudflare Pages/Worker project.
+Required bindings:
 - D1 binding: `DB` -> `vasilisa-db`
-- Secret `ADMIN_USER`
-- Secret `ADMIN_PASSWORD`
-- Secret `SESSION_SECRET`
+- `ADMIN_USER`
+- `ADMIN_PASSWORD`
+- `SESSION_SECRET` may remain configured; this version does not require it for basic sessions.
 
-The worker creates the small required D1 tables automatically if they do not exist.
+Important: this version never assumes a `booking_date` column. It reads the existing bookings table dynamically and supports common date/time column names. Do not recreate the existing D1 database.
