@@ -1,187 +1,87 @@
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-async function cols(db, table){
-  try{
-    const r = await db.prepare(`PRAGMA table_info("${table}")`).all();
-    return (r.results || []).map(x => x.name);
-  }catch(e){ return []; }
-}
-async function rows(db, table, limit=200){
-  try{
-    const r = await db.prepare(`SELECT * FROM "${table}" LIMIT ${limit}`).all();
-    return r.results || [];
-  }catch(e){ return []; }
-}
-function pick(o, names, fallback=""){
-  for(const n of names) if(o && o[n] !== undefined && o[n] !== null) return o[n];
-  return fallback;
-}
-async function tableInfo(db, table){
-  return { columns: await cols(db, table), data: await rows(db, table) };
-}
-
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const json=(o,status=200,headers={})=>new Response(JSON.stringify(o),{status,headers:{"content-type":"application/json;charset=utf-8",...headers}});
+const html=(s,status=200,headers={})=>new Response(s,{status,headers:{"content-type":"text/html;charset=utf-8","cache-control":"no-store",...headers}});
+const rand=()=>crypto.randomUUID().replaceAll("-","")+crypto.randomUUID().replaceAll("-","");
+const ck=(v,max=604800)=>`va_session=${encodeURIComponent(v)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${max}`;
+async function columns(db,t){try{const r=await db.prepare(`PRAGMA table_info("${t}")`).all();return r.results||[]}catch{return[]}}
+async function exists(db,t){try{await db.prepare(`SELECT 1 FROM "${t}" LIMIT 1`).first();return true}catch{return false}}
+async function all(db,t,limit=300){try{const r=await db.prepare(`SELECT * FROM "${t}" LIMIT ${limit}`).all();return r.results||[]}catch{return[]}}
 async function ensure(db){
-  await db.prepare(`CREATE TABLE IF NOT EXISTS admin_sessions (
-    token TEXT PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP, expires_at TEXT NOT NULL
-  )`).run();
-  await db.prepare(`CREATE TABLE IF NOT EXISTS admin_settings (
-    key TEXT PRIMARY KEY, value TEXT
-  )`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_sessions(token TEXT PRIMARY KEY,expires_at TEXT NOT NULL)`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_settings(key TEXT PRIMARY KEY,value TEXT)`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_schedule(id INTEGER PRIMARY KEY AUTOINCREMENT,day INTEGER NOT NULL,open INTEGER DEFAULT 1,start_time TEXT DEFAULT '09:00',end_time TEXT DEFAULT '17:00')`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_gallery(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT,image_url TEXT,kind TEXT DEFAULT 'before_after',active INTEGER DEFAULT 1)`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_reviews(id INTEGER PRIMARY KEY AUTOINCREMENT,author TEXT,text TEXT,rating INTEGER DEFAULT 5,active INTEGER DEFAULT 1)`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_quiz_questions(id INTEGER PRIMARY KEY AUTOINCREMENT,question TEXT,active INTEGER DEFAULT 1,sort_order INTEGER DEFAULT 0)`).run();
+ await db.prepare(`CREATE TABLE IF NOT EXISTS admin_quiz_options(id INTEGER PRIMARY KEY AUTOINCREMENT,question_id INTEGER,label TEXT,concern TEXT,sort_order INTEGER DEFAULT 0)`).run();
 }
-
-function cookie(name, value, maxAge=604800){
-  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
-}
-async function authorized(req, env){
-  const c = req.headers.get("Cookie") || "";
-  const m = c.match(/va_session=([^;]+)/);
-  if(!m) return false;
-  try{
-    const token = decodeURIComponent(m[1]);
-    const r = await env.DB.prepare(
-      `SELECT token FROM admin_sessions WHERE token=? AND expires_at > CURRENT_TIMESTAMP`
-    ).bind(token).first();
-    return !!r;
-  }catch(e){ return false; }
-}
-function rand(){
-  return crypto.randomUUID().replaceAll("-","") + crypto.randomUUID().replaceAll("-","");
-}
-
-const CSS = `
-*{box-sizing:border-box}html,body{margin:0;background:#160f1c;color:#f3ebe1;font-family:Inter,Arial,sans-serif}
-body{min-height:100vh}.wrap{max-width:1200px;margin:auto;padding:24px}
-header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0 24px;border-bottom:1px solid #3a2b3e}
-.brand{font-family:Georgia,serif;font-size:28px}.muted{color:#b9aeba}.gold{color:#c79a52}
-nav{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0}button,.btn{border:1px solid #c79a52;background:#241725;color:#f3ebe1;padding:11px 15px;border-radius:8px;cursor:pointer}button:hover,.btn:hover{background:#312035}
-input,select,textarea{width:100%;background:#211621;border:1px solid #55435b;color:#f3ebe1;padding:11px;border-radius:8px}textarea{min-height:90px}
-.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:#211621;border:1px solid #3a2b3e;border-radius:12px;padding:18px}.stat b{display:block;font-size:28px;margin-top:8px}
-.panel{background:#211621;border:1px solid #3a2b3e;border-radius:12px;padding:20px;margin-top:18px}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:11px;border-bottom:1px solid #3a2b3e;vertical-align:top}th{color:#c79a52}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}.actions{display:flex;flex-wrap:wrap;gap:8px}.error{border:1px solid #a94d5e;background:#28141d;color:#ffb8c2;padding:14px;border-radius:9px;margin:15px 0}
-.login{max-width:430px;margin:10vh auto}.title{font-family:Georgia,serif;font-size:38px;margin:0 0 8px}
-@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr}.wrap{padding:14px}table{font-size:13px;display:block;overflow:auto;white-space:nowrap}}
-@media(max-width:520px){.grid{grid-template-columns:1fr}.brand{font-size:23px}}
-`;
-
-async function api(req, env, url){
-  await ensure(env.DB);
-  const p = url.pathname;
-  if(p === "/api/login" && req.method==="POST"){
-    const b = await req.json().catch(()=>({}));
-    if(String(b.user||"") !== String(env.ADMIN_USER||"") || String(b.password||"") !== String(env.ADMIN_PASSWORD||""))
-      return Response.json({ok:false,error:"Неверный логин или пароль"},{status:401});
-    const token=rand();
-    await env.DB.prepare(`INSERT INTO admin_sessions(token,expires_at) VALUES(?,datetime('now','+7 days'))`).bind(token).run();
-    return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json','set-cookie':cookie("va_session",token)}});
-  }
-  if(p === "/api/logout"){
-    const c=req.headers.get("Cookie")||"",m=c.match(/va_session=([^;]+)/);
-    if(m) await env.DB.prepare("DELETE FROM admin_sessions WHERE token=?").bind(decodeURIComponent(m[1])).run().catch(()=>{});
-    return new Response(JSON.stringify({ok:true}),{headers:{'content-type':'application/json','set-cookie':cookie("va_session","",-1)}});
-  }
-  if(!(await authorized(req,env))) return Response.json({ok:false,error:"auth"},{status:401});
-
-  if(p === "/api/data"){
-    const [proc,book,closedD,closedH,quiz,gallery,reviews,settings] = await Promise.all([
-      tableInfo(env.DB,"procedures"),tableInfo(env.DB,"bookings"),tableInfo(env.DB,"closed_days"),
-      tableInfo(env.DB,"closed_hours"),tableInfo(env.DB,"quiz_concerns"),tableInfo(env.DB,"gallery"),
-      tableInfo(env.DB,"reviews"),tableInfo(env.DB,"settings")
-    ]);
-    return Response.json({ok:true,procedures:proc.data,procedureColumns:proc.columns,bookings:book.data,bookingColumns:book.columns,
-      closedDays:closedD.data,closedDayColumns:closedD.columns,closedHours:closedH.data,closedHourColumns:closedH.columns,
-      quiz:quiz.data,gallery:gallery.data,reviews:reviews.data,settings:settings.data});
-  }
-
-  if(p === "/api/procedure" && req.method==="POST"){
-    const b=await req.json();
-    const id=Number(b.id);
-    const c=await cols(env.DB,"procedures");
-    const sets=[],vals=[];
-    if(c.includes("price") && b.price!==undefined){sets.push("price=?");vals.push(b.price)}
-    if(c.includes("description") && b.description!==undefined){sets.push("description=?");vals.push(b.description)}
-    if(c.includes("active") && b.active!==undefined){sets.push("active=?");vals.push(b.active?1:0)}
-    if(c.includes("name") && b.name!==undefined){sets.push("name=?");vals.push(b.name)}
-    if(!sets.length) return Response.json({ok:true});
-    await env.DB.prepare(`UPDATE procedures SET ${sets.join(",")} WHERE id=?`).bind(...vals,id).run();
-    return Response.json({ok:true});
-  }
-
-  if(p === "/api/close-day" && req.method==="POST"){
-    const b=await req.json(), c=await cols(env.DB,"closed_days");
-    const date=b.date, closed=b.closed!==false;
-    if(!c.includes("date")) return Response.json({ok:false,error:"В таблице closed_days нет колонки date"},{status:500});
-    if(closed){
-      if(c.includes("day")) await env.DB.prepare(`INSERT OR REPLACE INTO closed_days(date,day) VALUES(?,?)`).bind(date,date).run();
-      else await env.DB.prepare(`INSERT OR REPLACE INTO closed_days(date) VALUES(?)`).bind(date).run();
-    } else await env.DB.prepare(`DELETE FROM closed_days WHERE date=?`).bind(date).run();
-    return Response.json({ok:true});
-  }
-
-  if(p === "/api/close-hour" && req.method==="POST"){
-    const b=await req.json(), c=await cols(env.DB,"closed_hours");
-    if(!c.includes("date") || !c.includes("hour")) return Response.json({ok:false,error:"closed_hours требует date и hour"},{status:500});
-    if(b.closed!==false) await env.DB.prepare(`INSERT OR REPLACE INTO closed_hours(date,hour) VALUES(?,?)`).bind(b.date,Number(b.hour)).run();
-    else await env.DB.prepare(`DELETE FROM closed_hours WHERE date=? AND hour=?`).bind(b.date,Number(b.hour)).run();
-    return Response.json({ok:true});
-  }
-
-  if(p === "/api/booking-status" && req.method==="POST"){
-    const b=await req.json(), c=await cols(env.DB,"bookings");
-    if(!c.includes("status")) return Response.json({ok:false,error:"В таблице bookings нет status"},{status:500});
-    const id = b.id;
-    await env.DB.prepare(`UPDATE bookings SET status=? WHERE id=?`).bind(String(b.status),id).run();
-    return Response.json({ok:true});
-  }
-
-  return Response.json({ok:false,error:"Not found"},{status:404});
-}
-
-function loginPage(msg=""){
-return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vasilisa — Admin</title><style>${CSS}</style></head><body><main class="login"><div class="card"><div class="gold">COSMETOLOGY BY VASILISA</div><h1 class="title">Админ-панель</h1><p class="muted">Управление сайтом и записями</p>${msg?`<div class="error">${esc(msg)}</div>`:""}<form method="post" action="/login"><p><label>Логин<input name="user" autocomplete="username"></label></p><p><label>Пароль<input type="password" name="password" autocomplete="current-password"></label></p><button type="submit">Войти</button></form></div></main></body></html>`;
-}
-
-function shell(){
-return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vasilisa — Admin</title><style>${CSS}</style></head><body><div class="wrap"><header><div><div class="gold">COSMETOLOGY BY VASILISA</div><div class="brand">Админ-панель</div></div><button id="logout">Выйти</button></header><nav><button data-tab="dashboard">Обзор</button><button data-tab="bookings">Записи</button><button data-tab="procedures">Процедуры</button><button data-tab="calendar">Календарь</button><button data-tab="quiz">Квиз кожи</button></nav><div id="app"></div></div><script>
-const $=s=>document.querySelector(s), app=$("#app"); let data={};
-async function get(){let r=await fetch("/api/data"); if(r.status===401){location="/login";return} let j=await r.json(); if(!j.ok) throw Error(j.error); data=j}
-async function act(url,body){let r=await fetch(url,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});let j=await r.json();if(!j.ok)throw Error(j.error||"Ошибка");await get();render()}
-function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
-function pick(o,names){for(const n of names)if(o&&o[n]!=null)return o[n];return ""}
+async function auth(req,env){const m=(req.headers.get("Cookie")||"").match(/va_session=([^;]+)/);if(!m)return false;try{return !!await env.DB.prepare(`SELECT token FROM admin_sessions WHERE token=? AND expires_at>CURRENT_TIMESTAMP`).bind(decodeURIComponent(m[1])).first()}catch{return false}}
+const CSS=`*{box-sizing:border-box}body{margin:0;background:#160f1c;color:#f3ebe1;font:15px Inter,Arial,sans-serif}.wrap{max-width:1280px;margin:auto;padding:22px}.top{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #3b2b40;padding-bottom:18px}.brand{font:27px Georgia,serif}.gold{color:#c79a52}.muted{color:#b9aeba}.nav{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.nav button,.btn{background:#241725;border:1px solid #5a465f;color:#f3ebe1;border-radius:9px;padding:10px 14px;cursor:pointer}.nav button.on,.btn.primary{border-color:#c79a52;color:#fff;background:#2d2030}.btn.danger{border-color:#a85a68}.nav button:hover,.btn:hover{background:#35253a}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card,.panel{background:#211621;border:1px solid #3b2b40;border-radius:12px;padding:17px}.panel{margin-bottom:16px}.stat b{display:block;font-size:30px;margin-top:6px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.field{margin:10px 0}.field label{display:block;color:#b9aeba;margin-bottom:6px}input,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #59465e;background:#18111d;color:#f3ebe1}textarea{min-height:100px}.actions{display:flex;gap:8px;flex-wrap:wrap}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #3b2b40;vertical-align:top}th{color:#c79a52}.badge{display:inline-block;border:1px solid #57435d;border-radius:99px;padding:3px 8px;font-size:12px}.ok{color:#9dd5a8;border-color:#467650}.bad{color:#ffb5c0;border-color:#7c4651}.notice{padding:12px;border:1px solid #3b2b40;border-radius:9px;margin-bottom:12px}.error{color:#ffb5c0;border-color:#7c4651}.login{max-width:430px;margin:12vh auto}.title{font:40px Georgia,serif}.toast{position:fixed;right:18px;bottom:18px;background:#2b2030;border:1px solid #c79a52;padding:12px 16px;border-radius:9px;display:none;z-index:10}@media(max-width:850px){.grid{grid-template-columns:1fr 1fr}.row3{grid-template-columns:1fr}.row{grid-template-columns:1fr}}@media(max-width:520px){.grid{grid-template-columns:1fr}.wrap{padding:13px}.brand{font-size:23px}}`;
+function login(msg=""){return `<!doctype html><html lang=ru><meta name=viewport content="width=device-width,initial-scale=1"><title>Vasilisa Admin</title><style>${CSS}</style><body><main class=login><div class=card><div class=gold>COSMETOLOGY BY VASILISA</div><div class=title>Админ-панель</div><p class=muted>Управление сайтом</p>${msg?`<div class="notice error">${esc(msg)}</div>`:""}<form method=post action=/login><div class=field><label>Логин</label><input name=user autocomplete=username></div><div class=field><label>Пароль</label><input type=password name=password autocomplete=current-password></div><button class="btn primary">Войти</button></form></div></main></body></html>`}
+const PAGE=()=>`<!doctype html><html lang=ru><meta name=viewport content="width=device-width,initial-scale=1"><title>Vasilisa Admin</title><style>${CSS}</style><body><div class=wrap><div class=top><div><div class=gold>COSMETOLOGY BY VASILISA</div><div class=brand>Админ-панель</div></div><button class=btn id=logout>Выйти</button></div><div class=nav id=nav></div><main id=app></main><div id=toast class=toast></div></div><script>
+const $=s=>document.querySelector(s),app=$("#app"),nav=$("#nav");let S={tab:"dashboard",data:null};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const val=(o,a)=>{for(const x of a)if(o&&o[x]!=null)return o[x];return""};
+function toast(x){let t=$("#toast");t.textContent=x;t.style.display="block";setTimeout(()=>t.style.display="none",2200)}
+async function api(p,opt={}){let r=await fetch(p,opt);let j=await r.json().catch(()=>({ok:false,error:"Ответ сервера не JSON"}));if(r.status===401){location="/login";throw Error("auth")}if(!r.ok||j.ok===false)throw Error(j.error||"Ошибка");return j}
+async function load(){S.data=await api("/api/all")}
+function button(t,tab){return \`<button class="\${S.tab===tab?"on":""}" onclick="go('\${tab}')">\${t}</button>\`}
+function go(t){S.tab=t;render()}
+function renderNav(){nav.innerHTML=button("Обзор","dashboard")+button("Записи","bookings")+button("Календарь","calendar")+button("Процедуры","procedures")+button("Квиз кожи","quiz")+button("До / После","gallery")+button("Отзывы","reviews")+button("О Василисе","about")+button("Настройки","settings")}
 function render(){
- const tab=window.tab||"dashboard";
- if(tab==="dashboard"){app.innerHTML=\`<div class="grid"><div class="card stat"><span class="muted">Процедуры</span><b>\${data.procedures.length}</b></div><div class="card stat"><span class="muted">Записи</span><b>\${data.bookings.length}</b></div><div class="card stat"><span class="muted">Закрытые дни</span><b>\${data.closedDays.length}</b></div><div class="card stat"><span class="muted">Фото</span><b>\${data.gallery.length}</b></div></div><div class="panel"><h2>Система</h2><p class="muted">Админка подключена к существующей базе vasilisa-db. Колонки таблиц определяются автоматически, поэтому старую базу пересоздавать не нужно.</p></div>\`}
- if(tab==="bookings"){let rows=data.bookings.map(b=>\`<tr><td>\${esc(b.id)}</td><td>\${esc(pick(b,["client_name","name","client","customer_name"]))}</td><td>\${esc(pick(b,["phone","telephone"]))}</td><td>\${esc(pick(b,["procedure_name","procedure","service"]))}</td><td>\${esc(pick(b,["booking_date","date","appointment_date"]))} \${esc(pick(b,["booking_time","time","appointment_time"]))}</td><td>\${esc(pick(b,["status","state"]))}</td></tr>\`).join("");app.innerHTML=\`<div class="panel"><h2>Записи</h2><div style="overflow:auto"><table><thead><tr><th>ID</th><th>Клиент</th><th>Телефон</th><th>Процедура</th><th>Дата / время</th><th>Статус</th></tr></thead><tbody>\${rows||"<tr><td colspan=6>Пока нет записей</td></tr>"}</tbody></table></div></div>\`}
- if(tab==="procedures"){app.innerHTML=\`<div class="panel"><h2>Процедуры</h2>\${data.procedures.map(p=>\`<div class="card" style="margin:12px 0"><div class="row"><label>Название<input id="n\${p.id}" value="\${esc(p.name)}"></label><label>Цена<input id="p\${p.id}" value="\${esc(p.price)}"></label></div><p><label>Описание<textarea id="d\${p.id}">\${esc(p.description)}</textarea></label></p><div class="actions"><button onclick="saveProc(\${p.id})">Сохранить</button></div></div>\`).join("")}</div>\`}
- if(tab==="calendar"){let today=new Date().toISOString().slice(0,10);app.innerHTML=\`<div class="panel"><h2>Календарь</h2><div class="row"><label>Дата<input type="date" id="cd" value="\${today}"></label><div class="actions" style="align-items:end"><button onclick="closeDay(true)">Закрыть день</button><button onclick="closeDay(false)">Открыть день</button></div></div><p class="muted">Для отдельных часов:</p><div class="actions">\${[9,10,11,12,13,14,15,16].map(h=>\`<button onclick="closeHour(\${h},true)">\${h}:00 закрыть</button><button onclick="closeHour(\${h},false)">\${h}:00 открыть</button>\`).join("")}</div></div>\`}
- if(tab==="quiz"){app.innerHTML=\`<div class="panel"><h2>Квиз кожи</h2><p class="muted">В этой версии раздел подключён безопасно: данные читаются из quiz_concerns, если таблица существует. Старые данные не изменяются.</p><div class="grid">\${data.quiz.map(q=>\`<div class="card"><b>\${esc(pick(q,["name","title","concern","question"]))}</b></div>\`).join("")||"<div class=card>Пока нет данных</div>"}</div></div>\`}
+ renderNav();let d=S.data;
+ if(S.tab==="dashboard")app.innerHTML=\`<div class=grid><div class="card stat"><span class=muted>Записи</span><b>\${d.bookings.length}</b></div><div class="card stat"><span class=muted>Процедуры</span><b>\${d.procedures.length}</b></div><div class="card stat"><span class=muted>Галерея</span><b>\${d.gallery.length}</b></div><div class="card stat"><span class=muted>Отзывы</span><b>\${d.reviews.length}</b></div></div><div class=panel><h2>Vasilisa Admin</h2><p class=muted>Все основные разделы доступны. Данные существующей D1 читаются без предположения о конкретных названиях колонок.</p></div>\`;
+ if(S.tab==="bookings"){let rows=d.bookings.map(b=>\`<tr><td>\${esc(b.id)}</td><td>\${esc(val(b,["client_name","name","client","customer_name"]))}<br><span class=muted>\${esc(val(b,["phone","telephone"]))}</span></td><td>\${esc(val(b,["procedure_name","procedure","service","procedure_id"]))}</td><td>\${esc(val(b,["booking_date","date","appointment_date","date_time","datetime"]))}<br>\${esc(val(b,["booking_time","time","appointment_time"]))}</td><td><span class=badge>\${esc(val(b,["status","state"])||"pending")}</span></td><td><div class=actions><button class=btn onclick="statusBook(\${b.id},'confirmed')">Подтвердить</button><button class="btn danger" onclick="statusBook(\${b.id},'cancelled')">Отменить</button></div></td></tr>\`).join("");app.innerHTML=\`<div class=panel><h2>Записи</h2><div class=tablewrap><table><tr><th>ID</th><th>Клиент</th><th>Процедура</th><th>Дата / время</th><th>Статус</th><th></th></tr>\${rows||"<tr><td colspan=6>Записей пока нет</td></tr>"}</table></div></div>\`}
+ if(S.tab==="procedures")app.innerHTML=\`<div class=panel><h2>Процедуры</h2>\${d.procedures.map(p=>\`<div class=card style="margin:12px 0"><div class=row><div class=field><label>Название</label><input id=n\${p.id} value="\${esc(p.name)}"></div><div class=field><label>Цена</label><input id=pr\${p.id} value="\${esc(p.price)}"></div></div><div class=field><label>Описание</label><textarea id=de\${p.id}>\${esc(p.description)}</textarea></div><div class=actions><button class="btn primary" onclick="saveProc(\${p.id})">Сохранить</button></div></div>\`).join("")}</div>\`;
+ if(S.tab==="calendar"){app.innerHTML=\`<div class=panel><h2>Календарь</h2><div class=row><div class=field><label>Дата</label><input type=date id=date value="\${new Date().toISOString().slice(0,10)}"></div><div class=actions style="align-items:end"><button class=btn onclick="day(1)">Закрыть день</button><button class=btn onclick="day(0)">Открыть день</button></div></div><h3>Часы</h3><div class=actions>\${[9,10,11,12,13,14,15,16].map(h=>\`<button class=btn onclick="hour(\${h},1)">\${h}:00 закрыть</button><button class=btn onclick="hour(\${h},0)">\${h}:00 открыть</button>\`).join("")}</div><hr><h3>Еженедельное расписание</h3><div class=grid>\${d.schedule.map(x=>\`<div class=card><b>\${["Вс","Пн","Вт","Ср","Чт","Пт","Сб"][x.day]}</b><div class=field><input id=s\${x.id} value="\${esc(x.start_time)}"></div><div class=field><input id=e\${x.id} value="\${esc(x.end_time)}"></div><button class=btn onclick="sched(\${x.id})">Сохранить</button></div>\`).join("")}</div></div>\`}
+ if(S.tab==="quiz")app.innerHTML=\`<div class=panel><h2>Квиз кожи</h2><div class=actions><button class="btn primary" onclick="newQ()">Добавить вопрос</button></div>\${d.quiz.map(q=>\`<div class=card style="margin-top:12px"><div class=field><label>Вопрос</label><input id=q\${q.id} value="\${esc(q.question)}"></div><div class=actions><button class=btn onclick="saveQ(\${q.id})">Сохранить</button><button class="btn danger" onclick="delQ(\${q.id})">Удалить</button></div></div>\`).join("")}</div>\`;
+ if(S.tab==="gallery")app.innerHTML=\`<div class=panel><h2>До / После</h2><div class=row><div class=field><label>Название</label><input id=gt></div><div class=field><label>URL изображения</label><input id=gu placeholder="https://..."></div></div><button class="btn primary" onclick="addGallery()">Добавить</button><div class=grid style="margin-top:15px">\${d.gallery.map(g=>\`<div class=card><b>\${esc(val(g,["title","name"]))}</b><p class=muted>\${esc(val(g,["image_url","url"]))}</p><button class="btn danger" onclick="delGallery(\${g.id})">Удалить</button></div>\`).join("")}</div></div>\`;
+ if(S.tab==="reviews")app.innerHTML=\`<div class=panel><h2>Отзывы</h2><div class=row3><input id=ra placeholder="Имя"><input id=rt placeholder="Текст"><input id=rr placeholder="Оценка 1–5" value=5></div><br><button class="btn primary" onclick="addReview()">Добавить</button><div class=grid style="margin-top:15px">\${d.reviews.map(r=>\`<div class=card><b>\${esc(val(r,["author","name"]))}</b><p>\${esc(val(r,["text","review","content"]))}</p><span class=gold>\${esc(val(r,["rating","score"]))} ★</span><br><button class="btn danger" onclick="delReview(\${r.id})">Удалить</button></div>\`).join("")}</div></div>\`;
+ if(S.tab==="about")app.innerHTML=\`<div class=panel><h2>О Василисе</h2><p class=muted>Этот раздел хранит текст отдельно и не ломает существующую базу сайта.</p><div class=field><label>Текст</label><textarea id=aboutText>\${esc(d.settings.about||"")}</textarea></div><button class="btn primary" onclick="saveSetting('about',$('#aboutText').value)">Сохранить</button></div>\`;
+ if(S.tab==="settings")app.innerHTML=\`<div class=panel><h2>Настройки</h2>\${["address","phone","instagram","email","consultation_text"].map(k=>\`<div class=field><label>\${k}</label><input id="set_\${k}" value="\${esc(d.settings[k]||"")}"></div>\`).join("")}<button class="btn primary" onclick="saveSettings()">Сохранить настройки</button></div>\`;
 }
-async function saveProc(id){await act("/api/procedure",{id,name:$("#n"+id).value,price:$("#p"+id).value,description:$("#d"+id).value})}
-async function closeDay(v){await act("/api/close-day",{date:$("#cd").value,closed:v})}
-async function closeHour(h,v){await act("/api/close-hour",{date:$("#cd").value,hour:h,closed:v})}
-document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{window.tab=b.dataset.tab;render()});
-$("#logout").onclick=async()=>{await fetch("/api/logout");location="/login"};
-get().then(render).catch(e=>app.innerHTML='<div class="error">'+esc(e.message)+'</div>');
+async function refresh(){await load();render()}
+async function saveProc(id){await api("/api/procedure",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,name:$("#n"+id).value,price:$("#pr"+id).value,description:$("#de"+id).value})});toast("Процедура сохранена");refresh()}
+async function statusBook(id,status){await api("/api/booking",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,status})});toast("Статус изменён");refresh()}
+async function day(closed){await api("/api/day",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({date:$("#date").value,closed})});toast("Календарь обновлён");refresh()}
+async function hour(hour,closed){await api("/api/hour",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({date:$("#date").value,hour,closed})});toast("Час обновлён");refresh()}
+async function sched(id){await api("/api/schedule",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,start_time:$("#s"+id).value,end_time:$("#e"+id).value})});toast("Расписание сохранено");refresh()}
+async function newQ(){await api("/api/quiz",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:"Новый вопрос"})});refresh()}
+async function saveQ(id){await api("/api/quiz",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id,question:$("#q"+id).value})});toast("Вопрос сохранён");refresh()}
+async function delQ(id){if(!confirm("Удалить вопрос?"))return;await api("/api/quiz",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({id})});refresh()}
+async function addGallery(){await api("/api/gallery",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({title:$("#gt").value,image_url:$("#gu").value})});refresh()}
+async function delGallery(id){await api("/api/gallery",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({id})});refresh()}
+async function addReview(){await api("/api/review",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({author:$("#ra").value,text:$("#rt").value,rating:Number($("#rr").value||5)})});refresh()}
+async function delReview(id){await api("/api/review",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({id})});refresh()}
+async function saveSetting(k,v){await api("/api/setting",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({key:k,value:v})});toast("Сохранено");refresh()}
+async function saveSettings(){for(const k of ["address","phone","instagram","email","consultation_text"])await saveSetting(k,$("#set_"+k).value);toast("Настройки сохранены")}
+$("#logout").onclick=async()=>{await fetch("/api/logout");location="/login"};refresh().catch(e=>app.innerHTML='<div class="notice error">'+esc(e.message)+'</div>');
 </script></body></html>`;
-}
 
-export default {
- async fetch(req, env){
-  const url=new URL(req.url);
-  try{
-    if(!env.DB) return new Response("D1 binding DB is missing",{status:500});
-    if(url.pathname.startsWith("/api/")) return api(req,env,url);
-    if(url.pathname==="/login" && req.method==="POST"){
-      const f=await req.formData(), u=String(f.get("user")||""), p=String(f.get("password")||"");
-      if(u!==String(env.ADMIN_USER||"") || p!==String(env.ADMIN_PASSWORD||"")) return new Response(loginPage("Неверный логин или пароль"),{headers:{"content-type":"text/html;charset=utf-8"}});
-      await ensure(env.DB); const token=rand();
-      await env.DB.prepare(`INSERT INTO admin_sessions(token,expires_at) VALUES(?,datetime('now','+7 days'))`).bind(token).run();
-      return new Response(shell(),{headers:{"content-type":"text/html;charset=utf-8","set-cookie":cookie("va_session",token)}});
-    }
-    if(url.pathname==="/login" || !(await authorized(req,env))) return new Response(loginPage(),{headers:{"content-type":"text/html;charset=utf-8"}});
-    return new Response(shell(),{headers:{"content-type":"text/html;charset=utf-8","cache-control":"no-store"}});
-  }catch(e){
-    return new Response(`<!doctype html><meta charset="utf-8"><style>body{font-family:Arial;background:#160f1c;color:#f3ebe1;padding:30px}pre{white-space:pre-wrap;color:#ffb8c2}</style><h1>Vasilisa Admin — ошибка</h1><pre>${esc(e.stack||e.message||e)}</pre>`,{status:500,headers:{"content-type":"text/html;charset=utf-8","cache-control":"no-store"}});
-  }
+async function api(req,env,url){
+ await ensure(env.DB);
+ const p=url.pathname;
+ if(p==="/api/login"&&req.method==="POST"){let b=await req.json().catch(()=>({}));if(String(b.user)!==String(env.ADMIN_USER||"")||String(b.password)!==String(env.ADMIN_PASSWORD||""))return json({ok:false,error:"Неверный логин или пароль"},401);let t=rand();await env.DB.prepare(`INSERT INTO admin_sessions(token,expires_at) VALUES(?,datetime('now','+7 days'))`).bind(t).run();return json({ok:true},200,{"set-cookie":ck(t)})}
+ if(p==="/api/logout"){let m=(req.headers.get("Cookie")||"").match(/va_session=([^;]+)/);if(m)await env.DB.prepare("DELETE FROM admin_sessions WHERE token=?").bind(decodeURIComponent(m[1])).run().catch(()=>{});return json({ok:true},200,{"set-cookie":ck("",-1)})}
+ if(!await auth(req,env))return json({ok:false,error:"auth"},401);
+ if(p==="/api/all"){
+  const [procedures,bookings,gallery,reviews,quiz,schedule,sd,sh,settings]=await Promise.all([
+   all(env.DB,"procedures"),all(env.DB,"bookings"),all(env.DB,"gallery"),all(env.DB,"reviews"),all(env.DB,"admin_quiz_questions"),
+   all(env.DB,"admin_schedule"),all(env.DB,"closed_days"),all(env.DB,"closed_hours"),all(env.DB,"admin_settings")
+  ]);
+  const sm={};settings.forEach(x=>sm[x.key]=x.value);
+  return json({ok:true,procedures,bookings,gallery,reviews,quiz,schedule,closedDays:sd,closedHours:sh,settings:sm})
  }
-};
+ let b=await req.json().catch(()=>({}));
+ if(p==="/api/procedure"&&req.method==="POST"){let c=await columns(env.DB,"procedures"),set=[],v=[];for(const [k,x] of [["name",b.name],["price",b.price],["description",b.description]])if(c.some(q=>q.name===k)){set.push(`${k}=?`);v.push(x)}if(set.length)await env.DB.prepare(`UPDATE procedures SET ${set.join(",")} WHERE id=?`).bind(...v,b.id).run();return json({ok:true})}
+ if(p==="/api/booking"&&req.method==="POST"){let c=await columns(env.DB,"bookings");if(c.some(x=>x.name==="status"))await env.DB.prepare(`UPDATE bookings SET status=? WHERE id=?`).bind(b.status,b.id).run();else return json({ok:false,error:"В bookings нет поля status"},400);return json({ok:true})}
+ if(p==="/api/day"&&req.method==="POST"){let c=await columns(env.DB,"closed_days");if(!c.some(x=>x.name==="date"))return json({ok:false,error:"В closed_days нет поля date"},400);if(b.closed)await env.DB.prepare(`INSERT OR REPLACE INTO closed_days(date) VALUES(?)`).bind(b.date).run();else await env.DB.prepare(`DELETE FROM closed_days WHERE date=?`).bind(b.date).run();return json({ok:true})}
+ if(p==="/api/hour"&&req.method==="POST"){let c=await columns(env.DB,"closed_hours");if(!c.some(x=>x.name==="date")||!c.some(x=>x.name==="hour"))return json({ok:false,error:"В closed_hours нет date/hour"},400);if(b.closed)await env.DB.prepare(`INSERT OR REPLACE INTO closed_hours(date,hour) VALUES(?,?)`).bind(b.date,b.hour).run();else await env.DB.prepare(`DELETE FROM closed_hours WHERE date=? AND hour=?`).bind(b.date,b.hour).run();return json({ok:true})}
+ if(p==="/api/schedule"&&req.method==="POST"){await env.DB.prepare(`UPDATE admin_schedule SET start_time=?,end_time=? WHERE id=?`).bind(b.start_time,b.end_time,b.id).run();return json({ok:true})}
+ if(p==="/api/quiz"){if(req.method==="POST"){if(b.id)await env.DB.prepare(`UPDATE admin_quiz_questions SET question=? WHERE id=?`).bind(b.question,b.id).run();else await env.DB.prepare(`INSERT INTO admin_quiz_questions(question) VALUES(?)`).bind(b.question).run()}else if(req.method==="DELETE")await env.DB.prepare(`DELETE FROM admin_quiz_questions WHERE id=?`).bind(b.id).run();return json({ok:true})}
+ if(p==="/api/gallery"){if(req.method==="POST")await env.DB.prepare(`INSERT INTO admin_gallery(title,image_url) VALUES(?,?)`).bind(b.title,b.image_url).run();else if(req.method==="DELETE")await env.DB.prepare(`DELETE FROM admin_gallery WHERE id=?`).bind(b.id).run();return json({ok:true})}
+ if(p==="/api/review"){if(req.method==="POST")await env.DB.prepare(`INSERT INTO admin_reviews(author,text,rating) VALUES(?,?,?)`).bind(b.author,b.text,b.rating).run();else if(req.method==="DELETE")await env.DB.prepare(`DELETE FROM admin_reviews WHERE id=?`).bind(b.id).run();return json({ok:true})}
+ if(p==="/api/setting"&&req.method==="POST"){await env.DB.prepare(`INSERT OR REPLACE INTO admin_settings(key,value) VALUES(?,?)`).bind(b.key,b.value).run();return json({ok:true})}
+ return json({ok:false,error:"Not found"},404)
+}
+export default{async fetch(req,env){const u=new URL(req.url);try{if(!env.DB)return html("D1 binding DB is missing",500);if(u.pathname==="/login"&&req.method==="POST"){let f=await req.formData(),user=String(f.get("user")||""),pass=String(f.get("password")||"");if(user!==String(env.ADMIN_USER||"")||pass!==String(env.ADMIN_PASSWORD||""))return html(login("Неверный логин или пароль"));await ensure(env.DB);let t=rand();await env.DB.prepare(`INSERT INTO admin_sessions(token,expires_at) VALUES(?,datetime('now','+7 days'))`).bind(t).run();return html(PAGE(),200,{"set-cookie":ck(t)})}if(u.pathname.startsWith("/api/"))return api(req,env,u);if(u.pathname==="/login"||!(await auth(req,env)))return html(login());return html(PAGE())}catch(e){return html(`<h1>Vasilisa Admin</h1><pre>${esc(e.stack||e.message||e)}</pre>`,500)}}};

@@ -1,9 +1,3 @@
-# Vasilisa Admin — D1 compatible
-Upload `_worker.js` as the only runtime file in the Cloudflare Pages/Worker project.
-Required bindings:
-- D1 binding: `DB` -> `vasilisa-db`
-- `ADMIN_USER`
-- `ADMIN_PASSWORD`
-- `SESSION_SECRET` may remain configured; this version does not require it for basic sessions.
-
-Important: this version never assumes a `booking_date` column. It reads the existing bookings table dynamically and supports common date/time column names. Do not recreate the existing D1 database.
+# Vasilisa Admin Full
+Replace the old `_worker.js` with this one. Keep D1 binding `DB -> vasilisa-db`, `ADMIN_USER`, and `ADMIN_PASSWORD`.
+This version uses separate admin_* tables for new admin-only content and dynamically reads the existing site tables. It does not assume `booking_date`.
