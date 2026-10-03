@@ -1,5 +1,5 @@
-1. Replace `_worker.js` in the existing vasilisa_admin repo.
-2. Do not recreate D1.
-3. Keep DB binding and admin secrets.
-4. Commit to main and wait for Success.
-5. Open /login.
+1. Upload/replace `_worker.js` in the existing GitHub repo.
+2. Commit changes to `main`.
+3. Wait for Cloudflare Pages deployment to turn green.
+4. Keep D1 binding `DB` and existing environment secrets unchanged.
+5. Open `https://vasilisa-admin.pages.dev/login` and go to **До / После** to select a photo from your phone or computer.
